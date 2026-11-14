@@ -549,11 +549,7 @@ pub fn encode_packet(packet: &MqttPacket, version: MqttVersion) -> Vec<u8> {
     }
 }
 
-pub fn decode_packet(
-    first_byte: u8,
-    body: &[u8],
-    version: MqttVersion,
-) -> io::Result<MqttPacket> {
+pub fn decode_packet(first_byte: u8, body: &[u8], version: MqttVersion) -> io::Result<MqttPacket> {
     let packet_type = first_byte >> 4;
     let flags = first_byte & 0x0F;
     let mut cur = Cursor::new(body);
@@ -582,8 +578,8 @@ pub fn decode_packet(
             let dup = (flags & 0x08) != 0;
             let qos_val = (flags >> 1) & 0x03;
             let retain = (flags & 0x01) != 0;
-            let qos = QoS::from_u8(qos_val)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+            let qos =
+                QoS::from_u8(qos_val).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
             let topic = read_mqtt_string(&mut cur)?;
             let packet_id = if qos != QoS::AtMostOnce {
@@ -615,12 +611,12 @@ pub fn decode_packet(
         4 => {
             // PUBACK
             let packet_id = read_u16(&mut cur)?;
-            let reason_code = if version == MqttVersion::V5 && (cur.position() as usize) < body.len()
-            {
-                read_u8(&mut cur)?
-            } else {
-                0
-            };
+            let reason_code =
+                if version == MqttVersion::V5 && (cur.position() as usize) < body.len() {
+                    read_u8(&mut cur)?
+                } else {
+                    0
+                };
             let properties = if version == MqttVersion::V5 && (cur.position() as usize) < body.len()
             {
                 Mqtt5Properties::decode(&mut cur)?
@@ -637,12 +633,12 @@ pub fn decode_packet(
         5 => {
             // PUBREC
             let packet_id = read_u16(&mut cur)?;
-            let reason_code = if version == MqttVersion::V5 && (cur.position() as usize) < body.len()
-            {
-                read_u8(&mut cur)?
-            } else {
-                0
-            };
+            let reason_code =
+                if version == MqttVersion::V5 && (cur.position() as usize) < body.len() {
+                    read_u8(&mut cur)?
+                } else {
+                    0
+                };
             Ok(MqttPacket::PubRec {
                 packet_id,
                 reason_code,
@@ -652,12 +648,12 @@ pub fn decode_packet(
         6 => {
             // PUBREL
             let packet_id = read_u16(&mut cur)?;
-            let reason_code = if version == MqttVersion::V5 && (cur.position() as usize) < body.len()
-            {
-                read_u8(&mut cur)?
-            } else {
-                0
-            };
+            let reason_code =
+                if version == MqttVersion::V5 && (cur.position() as usize) < body.len() {
+                    read_u8(&mut cur)?
+                } else {
+                    0
+                };
             Ok(MqttPacket::PubRel {
                 packet_id,
                 reason_code,
@@ -667,12 +663,12 @@ pub fn decode_packet(
         7 => {
             // PUBCOMP
             let packet_id = read_u16(&mut cur)?;
-            let reason_code = if version == MqttVersion::V5 && (cur.position() as usize) < body.len()
-            {
-                read_u8(&mut cur)?
-            } else {
-                0
-            };
+            let reason_code =
+                if version == MqttVersion::V5 && (cur.position() as usize) < body.len() {
+                    read_u8(&mut cur)?
+                } else {
+                    0
+                };
             Ok(MqttPacket::PubComp {
                 packet_id,
                 reason_code,
@@ -917,7 +913,10 @@ mod tests {
                 assert!(p.retain);
                 assert_eq!(p.packet_id, Some(42));
                 assert_eq!(p.payload, br#"{"temp":22.5}"#);
-                assert_eq!(p.properties.content_type.as_deref(), Some("application/json"));
+                assert_eq!(
+                    p.properties.content_type.as_deref(),
+                    Some("application/json")
+                );
                 assert_eq!(p.properties.response_topic.as_deref(), Some("reply/topic"));
                 assert_eq!(
                     p.properties.correlation_data.as_deref(),

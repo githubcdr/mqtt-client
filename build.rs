@@ -133,10 +133,8 @@ fn write_windows_res_from_ico(ico_path: &Path, res_path: &Path) -> std::io::Resu
     for i in 0..count {
         let entry_off = 6 + i * 16;
         let entry = &ico[entry_off..entry_off + 16];
-        let bytes_in_res =
-            u32::from_le_bytes([entry[8], entry[9], entry[10], entry[11]]) as usize;
-        let img_offset =
-            u32::from_le_bytes([entry[12], entry[13], entry[14], entry[15]]) as usize;
+        let bytes_in_res = u32::from_le_bytes([entry[8], entry[9], entry[10], entry[11]]) as usize;
+        let img_offset = u32::from_le_bytes([entry[12], entry[13], entry[14], entry[15]]) as usize;
 
         if img_offset + bytes_in_res > ico.len() {
             return Err(std::io::Error::new(
@@ -336,7 +334,12 @@ fn adler32(bytes: &[u8]) -> u32 {
 fn render_icon_rgba(size: usize) -> Vec<u8> {
     let mut buf = vec![0u8; size * size * 4];
     let inv_size = 1.0 / (size as f32);
-    let offsets = [(-0.25_f32, -0.25_f32), (0.25, -0.25), (-0.25, 0.25), (0.25, 0.25)];
+    let offsets = [
+        (-0.25_f32, -0.25_f32),
+        (0.25, -0.25),
+        (-0.25, 0.25),
+        (0.25, 0.25),
+    ];
 
     for py in 0..size {
         for px in 0..size {
@@ -435,13 +438,21 @@ fn sample_icon_sdf(u: f32, v: f32, size: usize) -> (f32, f32, f32, f32) {
 
     let d_line1 = sd_segment(u, v, node_hub.0, node_hub.1, node_top.0, node_top.1) - 0.020;
     let d_line2 = sd_segment(u, v, node_top.0, node_top.1, node_mid.0, node_mid.1) - 0.017;
-    let d_line3 = sd_segment(u, v, node_top.0, node_top.1, node_top_left.0, node_top_left.1) - 0.017;
+    let d_line3 = sd_segment(
+        u,
+        v,
+        node_top.0,
+        node_top.1,
+        node_top_left.0,
+        node_top_left.1,
+    ) - 0.017;
     let tree_lines_sdf = d_line1.min(d_line2).min(d_line3);
 
     let d_hub_circle = ((u - node_hub.0).powi(2) + (v - node_hub.1).powi(2)).sqrt() - 0.115;
     let d_top_circle = ((u - node_top.0).powi(2) + (v - node_top.1).powi(2)).sqrt() - 0.095;
     let d_mid_circle = ((u - node_mid.0).powi(2) + (v - node_mid.1).powi(2)).sqrt() - 0.070;
-    let d_tl_circle = ((u - node_top_left.0).powi(2) + (v - node_top_left.1).powi(2)).sqrt() - 0.070;
+    let d_tl_circle =
+        ((u - node_top_left.0).powi(2) + (v - node_top_left.1).powi(2)).sqrt() - 0.070;
 
     let nodes_sdf = d_hub_circle
         .min(d_top_circle)

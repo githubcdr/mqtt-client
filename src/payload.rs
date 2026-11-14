@@ -71,8 +71,7 @@ pub fn format_payload(bytes: &[u8], requested: PayloadFormat) -> FormattedPayloa
     match effective {
         PayloadFormat::Json => {
             if let Ok(val) = serde_json::from_slice::<JsonValue>(bytes) {
-                let pretty =
-                    serde_json::to_string_pretty(&val).unwrap_or_else(|_| String::new());
+                let pretty = serde_json::to_string_pretty(&val).unwrap_or_else(|_| String::new());
                 return FormattedPayload {
                     detected_format: PayloadFormat::Json,
                     display_text: pretty,
@@ -105,7 +104,11 @@ pub fn format_payload(bytes: &[u8], requested: PayloadFormat) -> FormattedPayloa
 
         PayloadFormat::Base64 => {
             let encoded = BASE64.encode(bytes);
-            let mut out = format!("// Base64 of raw payload ({} bytes):\n{}\n", bytes.len(), encoded);
+            let mut out = format!(
+                "// Base64 of raw payload ({} bytes):\n{}\n",
+                bytes.len(),
+                encoded
+            );
             if let Ok(as_str) = std::str::from_utf8(bytes) {
                 let trimmed = as_str.trim();
                 if trimmed.len() >= 4 {
@@ -457,8 +460,8 @@ pub fn encode_publish_payload(input: &str, mode: PublishEncoding) -> Result<Vec<
     match mode {
         PublishEncoding::Text => Ok(input.as_bytes().to_vec()),
         PublishEncoding::Json => {
-            let val: JsonValue = serde_json::from_str(input)
-                .map_err(|e| format!("Invalid JSON payload: {}", e))?;
+            let val: JsonValue =
+                serde_json::from_str(input).map_err(|e| format!("Invalid JSON payload: {}", e))?;
             serde_json::to_vec(&val).map_err(|e| format!("JSON serialization error: {}", e))
         }
         PublishEncoding::Hex => {
@@ -475,8 +478,7 @@ pub fn encode_publish_payload(input: &str, mode: PublishEncoding) -> Result<Vec<
         PublishEncoding::MessagePackFromJson => {
             let val: JsonValue = serde_json::from_str(input)
                 .map_err(|e| format!("Enter valid JSON to encode as MessagePack: {}", e))?;
-            rmp_serde::to_vec_named(&val)
-                .map_err(|e| format!("MessagePack encoding error: {}", e))
+            rmp_serde::to_vec_named(&val).map_err(|e| format!("MessagePack encoding error: {}", e))
         }
         PublishEncoding::ProtobufFromJson => {
             let val: JsonValue = serde_json::from_str(input).map_err(|e| {
