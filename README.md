@@ -6,7 +6,7 @@
 
 ## Screenshot
 
-![MQTT Explorer RS Screenshot](assets/screenshot.jpg)
+![MQTT Explorer RS Screenshot](assets/screenshot.png)
 
 ## Features
 
