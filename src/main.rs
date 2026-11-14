@@ -743,7 +743,7 @@ impl MqttApp {
     fn render_profile_sidebar(&mut self, ui: &mut Ui) {
         ui.add_space(4.0);
         ui.horizontal_wrapped(|ui| {
-            ui.heading("Connection Profiles");
+            ui.label(RichText::new("Connection Profiles").size(15.0).strong());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
                     .small_button("Save")
@@ -1142,7 +1142,7 @@ impl MqttApp {
 
     fn render_topic_tree_panel(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            ui.heading("Topic Explorer");
+            ui.label(RichText::new("Topic Explorer").size(15.0).strong());
             ui.separator();
             ui.label("Filter:");
             ui.add(
@@ -1407,17 +1407,22 @@ impl MqttApp {
         let graphs_reserved = (root_h + throughput_h).min((available_h * 0.65).max(60.0));
 
         let upper_h = (available_h - graphs_reserved).max(80.0);
-        let inspector_h = if self.show_publish_drawer {
-            (upper_h * 0.56).max(60.0)
+        let pub_h = if self.show_publish_drawer {
+            170.0_f32.min((upper_h * 0.35).max(80.0))
         } else {
-            (upper_h - 32.0).max(60.0)
+            0.0_f32
+        };
+        let inspector_h = if self.show_publish_drawer {
+            (upper_h - pub_h - 32.0).max(80.0)
+        } else {
+            (upper_h - 28.0).max(80.0)
         };
 
         ui.allocate_ui(egui::vec2(ui.available_width(), inspector_h), |ui| {
             self.render_inspector_section(ui);
         });
 
-        ui.separator();
+        ui.add_space(4.0);
 
         let header_resp = egui::CollapsingHeader::new(
             RichText::new("Publish Message Drawer").strong(),
@@ -1433,7 +1438,6 @@ impl MqttApp {
                     }
                 });
             }
-            let pub_h = (upper_h - inspector_h - 48.0).max(60.0);
             ui.allocate_ui(egui::vec2(ui.available_width(), pub_h), |ui| {
                 ScrollArea::vertical()
                     .id_salt("publish_drawer_scroll")
@@ -1447,7 +1451,7 @@ impl MqttApp {
             self.show_publish_drawer = !self.show_publish_drawer;
         }
 
-        ui.separator();
+        ui.add_space(4.0);
         self.render_root_topics_collapsing(ui);
         ui.add_space(4.0);
         self.render_throughput_collapsing(ui);
@@ -1455,13 +1459,6 @@ impl MqttApp {
 
     fn render_inspector_section(&mut self, ui: &mut Ui) {
         let Some(topic_path) = self.selected_topic.clone() else {
-            ui.vertical_centered(|ui| {
-                ui.add_space(40.0);
-                ui.label(
-                    RichText::new("Select any topic in the Topic Explorer to inspect payloads, MQTT v5 properties, history & diffs.")
-                        .color(Color32::from_rgb(145, 155, 170)),
-                );
-            });
             return;
         };
 
@@ -1889,7 +1886,7 @@ impl MqttApp {
                                     .hint_text("value")
                                     .desired_width(150.0),
                             );
-                            if ui.small_button("✖").clicked() {
+                            if ui.small_button("x").clicked() {
                                 remove_prop = Some(idx);
                             }
                         });
