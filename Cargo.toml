@@ -7,7 +7,7 @@ license = "MIT"
 
 [dependencies]
 eframe = { version = "0.37", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
-rfd = "0.15"
+rfd = "0.18"
 tokio = { version = "1.40", features = ["rt", "net", "io-util", "time", "sync", "macros"] }
 rustls = { version = "0.23", default-features = false, features = ["std", "tls12"] }
 rustls-rustcrypto = "0.0.2-alpha"
