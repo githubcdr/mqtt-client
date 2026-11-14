@@ -105,7 +105,6 @@ struct InspectorCache {
 struct MqttApp {
     config: AppConfig,
     show_profile_sidebar: bool,
-    show_performance_panel: bool,
     show_root_topics_section: bool,
     show_throughput_section: bool,
     show_password: bool,
@@ -144,6 +143,7 @@ impl MqttApp {
         visuals.panel_fill = Color32::from_rgb(22, 25, 32);
         visuals.faint_bg_color = Color32::from_rgb(28, 32, 42);
         visuals.extreme_bg_color = Color32::from_rgb(13, 15, 20);
+        visuals.indent_has_left_vline = false;
         cc.egui_ctx.set_visuals(visuals);
 
         let config = AppConfig::load_or_default();
@@ -156,7 +156,6 @@ impl MqttApp {
         let mut app = Self {
             config,
             show_profile_sidebar: true,
-            show_performance_panel: true,
             show_root_topics_section: true,
             show_throughput_section: true,
             show_password: false,
@@ -527,7 +526,7 @@ impl eframe::App for MqttApp {
             egui::Panel::left("profile_sidebar")
                 .resizable(true)
                 .default_size(320.0)
-                .size_range(260.0..=440.0)
+                .size_range(260.0..=520.0)
                 .show(ui, |ui| {
                     self.render_profile_sidebar(ui);
                 });
@@ -598,7 +597,7 @@ impl MqttApp {
 
                     if self.current_profile().tls.enabled {
                         ui.label(
-                            RichText::new("🔒 TLS")
+                            RichText::new("TLS")
                                 .color(Color32::from_rgb(110, 230, 150))
                                 .strong(),
                         );
@@ -607,7 +606,7 @@ impl MqttApp {
                     match self.conn_state {
                         ConnectionState::Disconnected => {
                             let btn = egui::Button::new(
-                                RichText::new("⚡ Connect")
+                                RichText::new("Connect")
                                     .color(Color32::WHITE)
                                     .strong(),
                             )
@@ -618,7 +617,7 @@ impl MqttApp {
                         }
                         ConnectionState::Connecting => {
                             let btn = egui::Button::new(
-                                RichText::new("⏳ Cancel")
+                                RichText::new("Cancel")
                                     .color(Color32::WHITE)
                                     .strong(),
                             )
@@ -629,7 +628,7 @@ impl MqttApp {
                         }
                         ConnectionState::Connected => {
                             let btn = egui::Button::new(
-                                RichText::new("⏹ Disconnect")
+                                RichText::new("Disconnect")
                                     .color(Color32::WHITE)
                                     .strong(),
                             )
@@ -674,14 +673,6 @@ impl MqttApp {
                             .clicked()
                         {
                             self.inject_sample_traffic();
-                        }
-                        let perf_btn_txt = if self.show_performance_panel {
-                            "Hide Graphs"
-                        } else {
-                            "Show Graphs"
-                        };
-                        if ui.button(perf_btn_txt).clicked() {
-                            self.show_performance_panel = !self.show_performance_panel;
                         }
                     });
                 });
@@ -729,6 +720,7 @@ impl MqttApp {
             if self.show_logs {
                 ui.separator();
                 ScrollArea::vertical()
+                    .max_height(ui.available_height())
                     .auto_shrink([false, false])
                     .id_salt("event_log_scroll")
                     .show(ui, |ui| {
@@ -750,11 +742,11 @@ impl MqttApp {
 
     fn render_profile_sidebar(&mut self, ui: &mut Ui) {
         ui.add_space(4.0);
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.heading("Connection Profiles");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui
-                    .small_button("💾 Save")
+                    .small_button("Save")
                     .on_hover_text("Save profiles to mqtt_profiles.toml")
                     .clicked()
                 {
@@ -764,7 +756,7 @@ impl MqttApp {
                     }
                 }
                 if ui
-                    .small_button("📤 Export")
+                    .small_button("Export")
                     .on_hover_text("Export profiles to TOML or JSON file")
                     .clicked()
                 {
@@ -780,7 +772,7 @@ impl MqttApp {
                     }
                 }
                 if ui
-                    .small_button("📥 Import")
+                    .small_button("Import")
                     .on_hover_text("Import profiles from TOML or JSON file")
                     .clicked()
                 {
@@ -802,14 +794,14 @@ impl MqttApp {
             });
         });
 
-        ui.horizontal(|ui| {
-            if ui.button("➕ New Profile").clicked() {
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("+ New Profile").clicked() {
                 let mut p = ConnectionProfile::default();
                 p.name = format!("Broker {}", self.config.profiles.len() + 1);
                 self.config.profiles.push(p);
                 self.config.selected_profile_idx = self.config.profiles.len() - 1;
             }
-            if ui.button("📋 Duplicate").clicked() {
+            if ui.button("Duplicate").clicked() {
                 let mut dup = self.current_profile().clone();
                 dup.id = uuid_short();
                 dup.name = format!("{} (Copy)", dup.name);
@@ -817,7 +809,7 @@ impl MqttApp {
                 self.config.profiles.push(dup);
                 self.config.selected_profile_idx = self.config.profiles.len() - 1;
             }
-            if self.config.profiles.len() > 1 && ui.button("🗑 Delete").clicked() {
+            if self.config.profiles.len() > 1 && ui.button("Delete").clicked() {
                 self.config.profiles.remove(self.config.selected_profile_idx);
                 if self.config.selected_profile_idx >= self.config.profiles.len() {
                     self.config.selected_profile_idx = self.config.profiles.len() - 1;
@@ -829,91 +821,98 @@ impl MqttApp {
 
         ScrollArea::vertical()
             .id_salt("profile_settings_scroll")
+            .auto_shrink([false, false])
             .show(ui, |ui| {
                 let mut show_pw = self.show_password;
                 let profile = self.current_profile_mut();
 
-                egui::Grid::new("broker_basic_grid")
-                    .num_columns(2)
-                    .spacing([8.0, 6.0])
-                    .striped(false)
+                egui::CollapsingHeader::new(RichText::new("Connection Profile").strong())
+                    .default_open(true)
                     .show(ui, |ui| {
-                        ui.label("Profile Name:");
-                        ui.text_edit_singleline(&mut profile.name);
-                        ui.end_row();
+                        egui::Grid::new("broker_basic_grid")
+                            .num_columns(2)
+                            .spacing([8.0, 6.0])
+                            .striped(false)
+                            .show(ui, |ui| {
+                                ui.label("Profile Name:");
+                                ui.text_edit_singleline(&mut profile.name);
+                                ui.end_row();
 
-                        ui.label("Protocol:");
-                        egui::ComboBox::from_id_salt("proto_ver_combo")
-                            .selected_text(profile.version.label())
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut profile.version,
-                                    MqttVersion::V31,
-                                    MqttVersion::V31.label(),
-                                );
-                                ui.selectable_value(
-                                    &mut profile.version,
-                                    MqttVersion::V311,
-                                    MqttVersion::V311.label(),
-                                );
-                                ui.selectable_value(
-                                    &mut profile.version,
-                                    MqttVersion::V5,
-                                    MqttVersion::V5.label(),
-                                );
+                                ui.label("Protocol:");
+                                egui::ComboBox::from_id_salt("proto_ver_combo")
+                                    .selected_text(profile.version.label())
+                                    .show_ui(ui, |ui| {
+                                        ui.selectable_value(
+                                            &mut profile.version,
+                                            MqttVersion::V31,
+                                            MqttVersion::V31.label(),
+                                        );
+                                        ui.selectable_value(
+                                            &mut profile.version,
+                                            MqttVersion::V311,
+                                            MqttVersion::V311.label(),
+                                        );
+                                        ui.selectable_value(
+                                            &mut profile.version,
+                                            MqttVersion::V5,
+                                            MqttVersion::V5.label(),
+                                        );
+                                    });
+                                ui.end_row();
+
+                                ui.label("Host:");
+                                ui.text_edit_singleline(&mut profile.host);
+                                ui.end_row();
+
+                                ui.label("Port:");
+                                ui.horizontal(|ui| {
+                                    ui.add(
+                                        egui::DragValue::new(&mut profile.port).range(1..=65535),
+                                    );
+                                    if ui.small_button("1883").clicked() {
+                                        profile.port = 1883;
+                                        profile.tls.enabled = false;
+                                    }
+                                    if ui.small_button("8883 (TLS)").clicked() {
+                                        profile.port = 8883;
+                                        profile.tls.enabled = true;
+                                    }
+                                });
+                                ui.end_row();
+
+                                ui.label("Client ID:");
+                                ui.horizontal(|ui| {
+                                    ui.add(
+                                        egui::TextEdit::singleline(&mut profile.client_id)
+                                            .desired_width(145.0),
+                                    );
+                                    if ui
+                                        .small_button("Rand")
+                                        .on_hover_text("Generate random Client ID")
+                                        .clicked()
+                                    {
+                                        profile.client_id = format!("mqtt-rs-{}", uuid_short());
+                                    }
+                                });
+                                ui.end_row();
+
+                                ui.label("Session:");
+                                ui.horizontal(|ui| {
+                                    ui.checkbox(&mut profile.clean_session, "Clean Start");
+                                    ui.label("KeepAlive:");
+                                    ui.add(
+                                        egui::DragValue::new(&mut profile.keep_alive_secs)
+                                            .range(5..=3600)
+                                            .suffix("s"),
+                                    );
+                                });
+                                ui.end_row();
                             });
-                        ui.end_row();
-
-                        ui.label("Host:");
-                        ui.text_edit_singleline(&mut profile.host);
-                        ui.end_row();
-
-                        ui.label("Port:");
-                        ui.horizontal(|ui| {
-                            ui.add(egui::DragValue::new(&mut profile.port).range(1..=65535));
-                            if ui.small_button("1883").clicked() {
-                                profile.port = 1883;
-                                profile.tls.enabled = false;
-                            }
-                            if ui.small_button("8883 (TLS)").clicked() {
-                                profile.port = 8883;
-                                profile.tls.enabled = true;
-                            }
-                        });
-                        ui.end_row();
-
-                        ui.label("Client ID:");
-                        ui.horizontal(|ui| {
-                            ui.add(
-                                egui::TextEdit::singleline(&mut profile.client_id)
-                                    .desired_width(145.0),
-                            );
-                            if ui
-                                .small_button("Rand")
-                                .on_hover_text("Generate random Client ID")
-                                .clicked()
-                            {
-                                profile.client_id = format!("mqtt-rs-{}", uuid_short());
-                            }
-                        });
-                        ui.end_row();
-
-                        ui.label("Session:");
-                        ui.horizontal(|ui| {
-                            ui.checkbox(&mut profile.clean_session, "Clean Start");
-                            ui.label("KeepAlive:");
-                            ui.add(
-                                egui::DragValue::new(&mut profile.keep_alive_secs)
-                                    .range(5..=3600)
-                                    .suffix("s"),
-                            );
-                        });
-                        ui.end_row();
                     });
 
                 ui.add_space(6.0);
                 egui::CollapsingHeader::new(
-                    RichText::new("🔑 Authentication (Username / Password)").strong(),
+                    RichText::new("Authentication (Username / Password)").strong(),
                 )
                 .default_open(true)
                 .show(ui, |ui| {
@@ -933,7 +932,7 @@ impl MqttApp {
                                         .desired_width(145.0),
                                 );
                                 if ui
-                                    .small_button(if show_pw { "🙈" } else { "👁" })
+                                    .small_button(if show_pw { "Hide" } else { "Show" })
                                     .clicked()
                                 {
                                     show_pw = !show_pw;
@@ -946,7 +945,7 @@ impl MqttApp {
 
                 let profile = self.current_profile_mut();
                 ui.add_space(6.0);
-                egui::CollapsingHeader::new(RichText::new("🔒 TLS / Certificates (rustls)").strong())
+                egui::CollapsingHeader::new(RichText::new("TLS / Certificates (rustls)").strong())
                     .default_open(true)
                     .show(ui, |ui| {
                         ui.checkbox(&mut profile.tls.enabled, "Enable TLS / SSL (MQTT over TLS)");
@@ -964,7 +963,7 @@ impl MqttApp {
                                         .hint_text("Optional custom CA path...")
                                         .desired_width(190.0),
                                 );
-                                if ui.button("📂 Browse...").clicked() {
+                                if ui.button("Browse...").clicked() {
                                     if let Some(path) = rfd::FileDialog::new()
                                         .add_filter("Certificates", &["pem", "crt", "cer", "der"])
                                         .pick_file()
@@ -985,7 +984,7 @@ impl MqttApp {
                                             )
                                             .desired_width(180.0),
                                         );
-                                        if ui.small_button("📂").clicked() {
+                                        if ui.small_button("Browse...").clicked() {
                                             if let Some(p) = rfd::FileDialog::new().pick_file() {
                                                 profile.tls.client_cert_path =
                                                     p.display().to_string();
@@ -1000,7 +999,7 @@ impl MqttApp {
                                             )
                                             .desired_width(180.0),
                                         );
-                                        if ui.small_button("📂").clicked() {
+                                        if ui.small_button("Browse...").clicked() {
                                             if let Some(p) = rfd::FileDialog::new().pick_file() {
                                                 profile.tls.client_key_path =
                                                     p.display().to_string();
@@ -1075,7 +1074,7 @@ impl MqttApp {
                                 ui.selectable_value(&mut sub.qos, QoS::AtLeastOnce, "QoS 1");
                                 ui.selectable_value(&mut sub.qos, QoS::ExactlyOnce, "QoS 2");
                             });
-                        if ui.small_button("✖").clicked() {
+                        if ui.small_button("x").clicked() {
                             remove_idx = Some(i);
                         }
                     });
@@ -1119,7 +1118,7 @@ impl MqttApp {
                             ui.selectable_value(&mut self.new_sub_qos, QoS::AtLeastOnce, "QoS 1");
                             ui.selectable_value(&mut self.new_sub_qos, QoS::ExactlyOnce, "QoS 2");
                         });
-                    if ui.button("➕ Add").clicked() && !self.new_sub_filter.trim().is_empty() {
+                    if ui.button("+ Add").clicked() && !self.new_sub_filter.trim().is_empty() {
                         let filter = self.new_sub_filter.trim().to_string();
                         let qos = self.new_sub_qos;
                         self.current_profile_mut()
@@ -1145,22 +1144,22 @@ impl MqttApp {
         ui.horizontal(|ui| {
             ui.heading("Topic Explorer");
             ui.separator();
-            ui.label("🔍");
+            ui.label("Filter:");
             ui.add(
                 egui::TextEdit::singleline(&mut self.search_filter)
                     .hint_text("Filter topics or payload values...")
                     .desired_width(200.0),
             );
-            if !self.search_filter.is_empty() && ui.small_button("✖").clicked() {
+            if !self.search_filter.is_empty() && ui.small_button("x").clicked() {
                 self.search_filter.clear();
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("🗑 Clear").clicked() {
+                if ui.button("Clear").clicked() {
                     self.tree.clear();
                     self.selected_topic = None;
                 }
-                let pause_txt = if self.paused { "▶ Resume" } else { "⏸ Pause" };
+                let pause_txt = if self.paused { "Resume" } else { "Pause" };
                 if ui.button(pause_txt).clicked() {
                     self.paused = !self.paused;
                 }
@@ -1395,27 +1394,23 @@ impl MqttApp {
 
     fn render_right_panel(&mut self, ui: &mut Ui) {
         let available_h = ui.available_height();
-        let graphs_reserved = if self.show_performance_panel {
-            let root_h = if self.show_root_topics_section {
-                168.0_f32
-            } else {
-                30.0_f32
-            };
-            let throughput_h = if self.show_throughput_section {
-                162.0_f32
-            } else {
-                30.0_f32
-            };
-            root_h + throughput_h
+        let root_h = if self.show_root_topics_section {
+            168.0_f32
         } else {
-            0.0_f32
+            30.0_f32
         };
-
-        let upper_h = (available_h - graphs_reserved).max(200.0);
-        let inspector_h = if self.show_publish_drawer {
-            (upper_h * 0.56).max(160.0)
+        let throughput_h = if self.show_throughput_section {
+            162.0_f32
         } else {
-            (upper_h - 36.0).max(140.0)
+            30.0_f32
+        };
+        let graphs_reserved = (root_h + throughput_h).min((available_h * 0.65).max(60.0));
+
+        let upper_h = (available_h - graphs_reserved).max(80.0);
+        let inspector_h = if self.show_publish_drawer {
+            (upper_h * 0.56).max(60.0)
+        } else {
+            (upper_h - 32.0).max(60.0)
         };
 
         ui.allocate_ui(egui::vec2(ui.available_width(), inspector_h), |ui| {
@@ -1424,38 +1419,38 @@ impl MqttApp {
 
         ui.separator();
 
-        ui.horizontal(|ui| {
-            let toggle_icon = if self.show_publish_drawer { "-" } else { "+" };
-            if ui
-                .button(RichText::new(format!("{} Publish Message Drawer", toggle_icon)).strong())
-                .clicked()
-            {
-                self.show_publish_drawer = !self.show_publish_drawer;
+        let header_resp = egui::CollapsingHeader::new(
+            RichText::new("Publish Message Drawer").strong(),
+        )
+        .id_salt("publish_drawer_collapsing")
+        .default_open(true)
+        .open(Some(self.show_publish_drawer))
+        .show(ui, |ui| {
+            if let Some(sel) = self.selected_topic.clone() {
+                ui.horizontal(|ui| {
+                    if ui.small_button("Use Selected Topic").clicked() {
+                        self.publish_draft.topic = sel;
+                    }
+                });
             }
-            if let Some(sel) = &self.selected_topic {
-                if ui.small_button("Use Selected Topic").clicked() {
-                    self.publish_draft.topic = sel.clone();
-                }
-            }
-        });
-
-        if self.show_publish_drawer {
-            let pub_h = (upper_h - inspector_h - 38.0).max(110.0);
+            let pub_h = (upper_h - inspector_h - 48.0).max(60.0);
             ui.allocate_ui(egui::vec2(ui.available_width(), pub_h), |ui| {
                 ScrollArea::vertical()
                     .id_salt("publish_drawer_scroll")
+                    .auto_shrink([false, false])
                     .show(ui, |ui| {
                         self.render_publish_drawer(ui);
                     });
             });
+        });
+        if header_resp.header_response.clicked() {
+            self.show_publish_drawer = !self.show_publish_drawer;
         }
 
-        if self.show_performance_panel {
-            ui.separator();
-            self.render_root_topics_collapsing(ui);
-            ui.add_space(4.0);
-            self.render_throughput_collapsing(ui);
-        }
+        ui.separator();
+        self.render_root_topics_collapsing(ui);
+        ui.add_space(4.0);
+        self.render_throughput_collapsing(ui);
     }
 
     fn render_inspector_section(&mut self, ui: &mut Ui) {
@@ -1613,7 +1608,7 @@ impl MqttApp {
         }
 
         ui.horizontal_wrapped(|ui| {
-            ui.selectable_value(&mut self.inspector_tab, InspectorTab::Payload, "📄 Payload");
+            ui.selectable_value(&mut self.inspector_tab, InspectorTab::Payload, "Payload");
             ui.selectable_value(
                 &mut self.inspector_tab,
                 InspectorTab::Diff,
@@ -1622,7 +1617,7 @@ impl MqttApp {
             ui.selectable_value(
                 &mut self.inspector_tab,
                 InspectorTab::HistoryChart,
-                "📈 Value Chart",
+                "Value Chart",
             );
 
             ui.separator();
@@ -1873,7 +1868,7 @@ impl MqttApp {
 
                     ui.horizontal(|ui| {
                         ui.label(RichText::new("User Properties:").size(11.5).strong());
-                        if ui.small_button("➕ Add Property").clicked() {
+                        if ui.small_button("+ Add Property").clicked() {
                             self.publish_draft
                                 .user_properties
                                 .push((String::new(), String::new()));
@@ -1987,7 +1982,7 @@ fn render_root_topics_chart(ui: &mut Ui, stats: &[RootTopicStat], total_msgs: u6
     if stats.is_empty() || total_msgs == 0 {
         ui.centered_and_justified(|ui| {
             ui.label(
-                RichText::new("No topic data yet — click '🧪 Sample Data' or connect to a broker")
+                RichText::new("No topic data yet — click '+ Sample Data' or connect to a broker")
                     .size(11.5)
                     .color(Color32::from_rgb(130, 140, 155)),
             );
