@@ -3,6 +3,8 @@
 mod client;
 mod config;
 mod icon;
+#[cfg(target_os = "linux")]
+mod linux_integration;
 mod payload;
 mod protocol;
 mod tree;
@@ -19,6 +21,25 @@ use tokio::sync::mpsc;
 use tree::TopicTree;
 
 fn main() -> eframe::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        // Allow explicit registration without opening a window:
+        // `mqtt-client --install-desktop-entry`
+        if std::env::args().any(|arg| arg == "--install-desktop-entry") {
+            match linux_integration::ensure_desktop_entry() {
+                Some(path) => {
+                    println!("Desktop entry installed/updated: {}", path.display());
+                    println!("App icon installed into the hicolor icon theme under $XDG_DATA_HOME/icons.");
+                }
+                None => {
+                    eprintln!("Could not install desktop entry (no writable XDG data home found).")
+                }
+            }
+            return Ok(());
+        }
+        let _ = linux_integration::ensure_desktop_entry();
+    }
+
     let app_icon = Arc::new(icon::build_window_icon());
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

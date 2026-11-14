@@ -83,7 +83,11 @@ jobs:
           mkdir -p dist
           cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" dist/
           chmod +x "dist/${{ matrix.binary }}"
-          tar -czf "mqtt-client-${{ matrix.name }}.tar.gz" -C dist "${{ matrix.binary }}"
+          if [[ "${{ matrix.name }}" == linux-* ]]; then
+            cp assets/mqtt-client.desktop dist/
+            cp assets/icon.png dist/
+          fi
+          tar -czf "mqtt-client-${{ matrix.name }}.tar.gz" -C dist .
 
       - name: Package Archive & Standalone EXE (Windows)
         if: matrix.package == 'zip'

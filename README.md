@@ -53,6 +53,22 @@ The single-file executable is produced at:
 - **Linux / macOS**: `target/release/mqtt-client`
 - **Windows**: `target/release/mqtt-client.exe`
 
+### Linux Desktop Icon & Menu Entry
+
+On Linux the binary self-registers with the desktop environment on launch
+(user-level only, no root): it writes `mqtt-client.desktop` to
+`~/.local/share/applications/` (with `Exec=` pointed at the binary you ran)
+and the app icon into the hicolor icon theme (`~/.local/share/icons/hicolor/`:
+scalable SVG plus PNG sizes 32–512). The entry name, `app_id`, and
+`StartupWMClass` all match, so GNOME/KDE/Wayland taskbars, docks, and the
+application menu show the correct icon and name. Everything is idempotent
+and refreshed automatically when the binary moves or the app updates.
+
+To install manually instead, drop `assets/mqtt-client.desktop` into
+`~/.local/share/applications/`, `assets/icon.png` into
+`~/.local/share/icons/hicolor/512x512/apps/mqtt-client.png`, and put the
+binary on your `$PATH`.
+
 ---
 
 ## Cross-Platform Targets (`amd64` & `arm64`)
