@@ -152,6 +152,13 @@ fn refresh_caches(data_home: &Path) {
         .arg(data_home.join("icons").join("hicolor"))
         .stderr(std::process::Stdio::null())
         .spawn();
+    // KDE/Plasma resolves app_id -> .desktop -> icon through its own KSycoca
+    // database, which only indexes menus on session start unless nudged.
+    // Without this, the taskbar shows a generic icon after self-registration
+    // until the next session restart.
+    let _ = Command::new("kbuildsycoca6")
+        .stderr(std::process::Stdio::null())
+        .spawn();
 }
 
 #[cfg(test)]
