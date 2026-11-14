@@ -155,9 +155,7 @@ impl ServerCertVerifier for NoCertificateVerification {
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        self.0
-            .signature_verification_algorithms
-            .supported_schemes()
+        self.0.signature_verification_algorithms.supported_schemes()
     }
 }
 
@@ -172,7 +170,9 @@ fn build_tls_connector(tls_cfg: &TlsConfig) -> Result<TlsConnector, String> {
 
     let config = if tls_cfg.accept_invalid_certs {
         let verifier = Arc::new(NoCertificateVerification(provider));
-        let danger_builder = builder.dangerous().with_custom_certificate_verifier(verifier);
+        let danger_builder = builder
+            .dangerous()
+            .with_custom_certificate_verifier(verifier);
         match client_auth {
             Some((certs, key)) => danger_builder
                 .with_client_auth_cert(certs, key)
@@ -300,13 +300,11 @@ async fn run_mqtt_loop(
         let connector = build_tls_connector(&profile.tls)?;
         let server_name = ServerName::try_from(host.clone())
             .map_err(|_| format!("Invalid TLS server hostname: '{}'", host))?;
-        let tls_stream = tokio::time::timeout(
-            Duration::from_secs(10),
-            connector.connect(server_name, tcp),
-        )
-        .await
-        .map_err(|_| "TLS handshake timed out".to_string())?
-        .map_err(|e| format!("TLS handshake failed: {}", e))?;
+        let tls_stream =
+            tokio::time::timeout(Duration::from_secs(10), connector.connect(server_name, tcp))
+                .await
+                .map_err(|_| "TLS handshake timed out".to_string())?
+                .map_err(|e| format!("TLS handshake failed: {}", e))?;
         MqttStream::Tls(Box::new(tls_stream))
     } else {
         MqttStream::Plain(tcp)
@@ -351,10 +349,13 @@ async fn run_mqtt_loop(
         .map_err(|e| format!("Failed to flush CONNECT: {}", e))?;
 
     // Wait for CONNACK
-    let connack = tokio::time::timeout(Duration::from_secs(10), read_next_packet(&mut stream, version))
-        .await
-        .map_err(|_| "Timed out waiting for CONNACK from broker".to_string())?
-        .map_err(|e| format!("Failed reading CONNACK: {}", e))?;
+    let connack = tokio::time::timeout(
+        Duration::from_secs(10),
+        read_next_packet(&mut stream, version),
+    )
+    .await
+    .map_err(|_| "Timed out waiting for CONNACK from broker".to_string())?
+    .map_err(|e| format!("Failed reading CONNACK: {}", e))?;
 
     let mut keep_alive_secs = profile.keep_alive_secs.max(5);
     match connack {
@@ -599,14 +600,15 @@ async fn run_mqtt_loop(
 
 fn alloc_packet_id(counter: &mut u16) -> u16 {
     let id = *counter;
-    *counter = if *counter == u16::MAX { 1 } else { *counter + 1 };
+    *counter = if *counter == u16::MAX {
+        1
+    } else {
+        *counter + 1
+    };
     id
 }
 
-async fn read_next_packet(
-    stream: &mut MqttStream,
-    version: MqttVersion,
-) -> io::Result<MqttPacket> {
+async fn read_next_packet(stream: &mut MqttStream, version: MqttVersion) -> io::Result<MqttPacket> {
     let mut first = [0u8; 1];
     stream.read_exact(&mut first).await?;
 

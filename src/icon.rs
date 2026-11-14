@@ -24,7 +24,12 @@ pub fn render_icon_rgba(size: usize) -> Vec<u8> {
     let inv_size = 1.0 / (size as f32);
 
     // 2x2 supersampling offsets
-    let offsets = [(-0.25_f32, -0.25_f32), (0.25, -0.25), (-0.25, 0.25), (0.25, 0.25)];
+    let offsets = [
+        (-0.25_f32, -0.25_f32),
+        (0.25, -0.25),
+        (-0.25, 0.25),
+        (0.25, 0.25),
+    ];
 
     for py in 0..size {
         for px in 0..size {
@@ -131,13 +136,21 @@ fn sample_icon_sdf(u: f32, v: f32, size: usize) -> (f32, f32, f32, f32) {
 
     let d_line1 = sd_segment(u, v, node_hub.0, node_hub.1, node_top.0, node_top.1) - 0.020;
     let d_line2 = sd_segment(u, v, node_top.0, node_top.1, node_mid.0, node_mid.1) - 0.017;
-    let d_line3 = sd_segment(u, v, node_top.0, node_top.1, node_top_left.0, node_top_left.1) - 0.017;
+    let d_line3 = sd_segment(
+        u,
+        v,
+        node_top.0,
+        node_top.1,
+        node_top_left.0,
+        node_top_left.1,
+    ) - 0.017;
     let tree_lines_sdf = d_line1.min(d_line2).min(d_line3);
 
     let d_hub_circle = ((u - node_hub.0).powi(2) + (v - node_hub.1).powi(2)).sqrt() - 0.115;
     let d_top_circle = ((u - node_top.0).powi(2) + (v - node_top.1).powi(2)).sqrt() - 0.095;
     let d_mid_circle = ((u - node_mid.0).powi(2) + (v - node_mid.1).powi(2)).sqrt() - 0.070;
-    let d_tl_circle = ((u - node_top_left.0).powi(2) + (v - node_top_left.1).powi(2)).sqrt() - 0.070;
+    let d_tl_circle =
+        ((u - node_top_left.0).powi(2) + (v - node_top_left.1).powi(2)).sqrt() - 0.070;
 
     let nodes_sdf = d_hub_circle
         .min(d_top_circle)

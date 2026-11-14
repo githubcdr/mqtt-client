@@ -396,10 +396,9 @@ impl TopicTree {
         };
 
         let default_expanded = depth < 2;
-        let child = node
-            .children
-            .entry(seg.to_string())
-            .or_insert_with(|| TopicNode::new(seg.to_string(), next_path.clone(), default_expanded));
+        let child = node.children.entry(seg.to_string()).or_insert_with(|| {
+            TopicNode::new(seg.to_string(), next_path.clone(), default_expanded)
+        });
 
         let is_new = Self::insert_into_node(
             child,
@@ -443,7 +442,10 @@ pub fn compute_payload_diff(old_text: &str, new_text: &str) -> Vec<DiffLine> {
         };
         lines.push(DiffLine {
             tag,
-            text: change.value().trim_end_matches(&['\r', '\n'][..]).to_string(),
+            text: change
+                .value()
+                .trim_end_matches(&['\r', '\n'][..])
+                .to_string(),
         });
     }
     lines
