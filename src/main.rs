@@ -24,7 +24,11 @@ fn main() -> eframe::Result<()> {
     let app_icon = Arc::new(icon::build_window_icon());
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("MQTT Explorer RS — Lightweight MQTT 3.1 / 3.1.1 / 5.0 Client")
+            .with_title(concat!(
+                "MQTT Explorer RS v",
+                env!("CARGO_PKG_VERSION"),
+                " — Lightweight MQTT 3.1 / 3.1.1 / 5.0 Client"
+            ))
             .with_app_id("mqtt-client")
             .with_inner_size([1380.0, 880.0])
             .with_min_inner_size([980.0, 640.0])
@@ -33,7 +37,7 @@ fn main() -> eframe::Result<()> {
     };
 
     eframe::run_native(
-        "MQTT Explorer RS",
+        concat!("MQTT Explorer RS v", env!("CARGO_PKG_VERSION")),
         native_options,
         Box::new(|cc| Ok(Box::new(MqttApp::new(cc)))),
     )
@@ -103,6 +107,7 @@ struct MqttApp {
     show_profile_sidebar: bool,
     show_performance_panel: bool,
     show_root_topics_section: bool,
+    show_throughput_section: bool,
     show_password: bool,
     new_sub_filter: String,
     new_sub_qos: QoS,
@@ -153,6 +158,7 @@ impl MqttApp {
             show_profile_sidebar: true,
             show_performance_panel: true,
             show_root_topics_section: true,
+            show_throughput_section: true,
             show_password: false,
             new_sub_filter: String::new(),
             new_sub_qos: QoS::AtMostOnce,
@@ -506,45 +512,46 @@ impl MqttApp {
 }
 
 impl eframe::App for MqttApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.poll_events();
 
         if self.conn_state != ConnectionState::Disconnected {
-            ctx.request_repaint_after(std::time::Duration::from_millis(250));
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(250));
         }
 
-        self.render_top_bar(ctx);
-        self.render_bottom_bar(ctx);
+        self.render_top_bar(ui);
+        self.render_bottom_bar(ui);
 
         if self.show_profile_sidebar {
-            egui::SidePanel::left("profile_sidebar")
+            egui::Panel::left("profile_sidebar")
                 .resizable(true)
-                .default_width(320.0)
-                .width_range(260.0..=440.0)
-                .show(ctx, |ui| {
+                .default_size(320.0)
+                .size_range(260.0..=440.0)
+                .show(ui, |ui| {
                     self.render_profile_sidebar(ui);
                 });
         }
 
-        egui::SidePanel::right("inspector_panel")
+        egui::Panel::right("inspector_panel")
             .resizable(true)
-            .default_width(480.0)
-            .width_range(340.0..=820.0)
-            .show(ctx, |ui| {
+            .default_size(480.0)
+            .size_range(340.0..=820.0)
+            .show(ui, |ui| {
                 self.render_right_panel(ui);
             });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             self.render_topic_tree_panel(ui);
         });
     }
 }
 
 impl MqttApp {
-    fn render_top_bar(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::top("top_bar")
-            .exact_height(46.0)
-            .show(ctx, |ui| {
+    fn render_top_bar(&mut self, ui: &mut egui::Ui) {
+        egui::Panel::top("top_bar")
+            .exact_size(46.0)
+            .show(ui, |ui| {
                 ui.horizontal_centered(|ui| {
                     let sidebar_label = if self.show_profile_sidebar {
                         "◀ Profiles"
@@ -681,8 +688,24 @@ impl MqttApp {
             });
     }
 
-    fn render_bottom_bar(&mut self, ctx: &egui::Context) {
-        egui::TopBottomPanel::bottom("bottom_status_bar").show(ctx, |ui| {
+    fn render_bottom_bar(&mut self, ui: &mut egui::Ui) {
+        let panel_id = if self.show_logs {
+            "bottom_status_bar_open"
+        } else {
+            "bottom_status_bar_closed"
+        };
+        let mut panel = egui::Panel::bottom(panel_id);
+        if self.show_logs {
+            panel = panel
+                .resizable(true)
+                .default_size(160.0)
+                .min_size(70.0)
+                .max_size(480.0);
+        } else {
+            panel = panel.resizable(false);
+        }
+
+        panel.show(ui, |ui| {
             ui.horizontal(|ui| {
                 let toggle_txt = if self.show_logs {
                     "Hide Event Log"
@@ -706,9 +729,10 @@ impl MqttApp {
             if self.show_logs {
                 ui.separator();
                 ScrollArea::vertical()
-                    .max_height(120.0)
+                    .auto_shrink([false, false])
                     .id_salt("event_log_scroll")
                     .show(ui, |ui| {
+                        ui.set_min_width(ui.available_width());
                         for line in &self.logs {
                             let color = if line.contains("ERROR") || line.contains("rejected") {
                                 Color32::from_rgb(255, 110, 110)
@@ -1023,11 +1047,6 @@ impl MqttApp {
                             });
                         }
                     });
-
-                if self.show_performance_panel {
-                    ui.add_space(6.0);
-                    self.render_throughput_collapsing(ui);
-                }
             });
     }
 
@@ -1205,18 +1224,19 @@ impl MqttApp {
         }
     }
 
-    fn render_throughput_collapsing(&self, ui: &mut Ui) {
+    fn render_throughput_collapsing(&mut self, ui: &mut Ui) {
         let mpm = self.tree.messages_per_minute();
         let mps = self.tree.messages_per_second();
         let peak_mpm = self.tree.peak_msgs_per_min;
         let bytes_60s = self.tree.bytes_last_60s();
         let series = self.tree.series_last_60s(30);
 
-        egui::CollapsingHeader::new(
-            RichText::new(format!("📈 Throughput ({:.0} msg/min)", mpm)).strong(),
+        let header_resp = egui::CollapsingHeader::new(
+            RichText::new(format!("Throughput ({:.0} msg/min)", mpm)).strong(),
         )
         .id_salt("throughput_collapsing")
         .default_open(true)
+        .open(Some(self.show_throughput_section))
         .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(
@@ -1242,6 +1262,9 @@ impl MqttApp {
                 render_throughput_bar_chart(ui, &series);
             });
         });
+        if header_resp.header_response.clicked() {
+            self.show_throughput_section = !self.show_throughput_section;
+        }
     }
 
     fn render_root_topics_collapsing(&mut self, ui: &mut Ui) {
@@ -1372,17 +1395,23 @@ impl MqttApp {
 
     fn render_right_panel(&mut self, ui: &mut Ui) {
         let available_h = ui.available_height();
-        let root_topics_reserved = if self.show_performance_panel {
-            if self.show_root_topics_section {
+        let graphs_reserved = if self.show_performance_panel {
+            let root_h = if self.show_root_topics_section {
                 168.0_f32
             } else {
-                32.0_f32
-            }
+                30.0_f32
+            };
+            let throughput_h = if self.show_throughput_section {
+                162.0_f32
+            } else {
+                30.0_f32
+            };
+            root_h + throughput_h
         } else {
             0.0_f32
         };
 
-        let upper_h = (available_h - root_topics_reserved).max(200.0);
+        let upper_h = (available_h - graphs_reserved).max(200.0);
         let inspector_h = if self.show_publish_drawer {
             (upper_h * 0.56).max(160.0)
         } else {
@@ -1424,6 +1453,8 @@ impl MqttApp {
         if self.show_performance_panel {
             ui.separator();
             self.render_root_topics_collapsing(ui);
+            ui.add_space(4.0);
+            self.render_throughput_collapsing(ui);
         }
     }
 
