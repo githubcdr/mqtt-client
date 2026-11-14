@@ -1,6 +1,12 @@
-# MQTT Explorer RS (`mqtt-client`)
+<div align="center">
+  <img src="assets/icon.png" width="96" alt="MQTT Explorer RS Logo" />
+  <h1>MQTT Explorer RS (<code>mqtt-client</code>)</h1>
+  <p>A lightweight, portable, single-binary desktop MQTT client written in pure Rust using <code>eframe</code> / <code>egui</code>, <code>tokio</code>, and <code>rustls</code>.</p>
+</div>
 
-A lightweight, portable, single-binary desktop MQTT client written in pure Rust using `eframe` / `egui`, `tokio`, and `rustls`.
+## Screenshot
+
+![MQTT Explorer RS Screenshot](assets/screenshot.jpg)
 
 ## Features
 
