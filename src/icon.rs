@@ -37,7 +37,7 @@ pub fn render_icon_rgba(size: usize) -> Vec<u8> {
                 // Normalized coordinates in [-1.0, 1.0]
                 let u = ((px as f32 + 0.5 + ox) * inv_size) * 2.0 - 1.0;
                 let v = ((py as f32 + 0.5 + oy) * inv_size) * 2.0 - 1.0;
-                let (r, g, b, a) = sample_icon_sdf(u, v);
+                let (r, g, b, a) = sample_icon_sdf(u, v, size);
                 r_acc += r * a;
                 g_acc += g * a;
                 b_acc += b * a;
@@ -66,117 +66,113 @@ pub fn render_icon_rgba(size: usize) -> Vec<u8> {
     buf
 }
 
-fn sample_icon_sdf(u: f32, v: f32) -> (f32, f32, f32, f32) {
+fn sample_icon_sdf(u: f32, v: f32, size: usize) -> (f32, f32, f32, f32) {
     // 1. Rounded Squircle Badge SDF
     let half_extent = 0.88_f32;
     let corner_radius = 0.36_f32;
     let d_badge = sd_rounded_box(u, v, half_extent, half_extent, corner_radius);
 
-    let aa = 0.012_f32;
+    let aa = (1.5 / size as f32).max(0.0055);
     let badge_alpha = smoothstep(aa, -aa, d_badge);
     if badge_alpha <= 0.0 {
         return (0.0, 0.0, 0.0, 0.0);
     }
 
-    // Background rich dark-indigo / slate-teal gradient
+    // Background rich dark-indigo / slate-navy gradient
     let t_diag = ((u + v) * 0.5 + 1.0) * 0.5;
-    let mut bg_r = lerp(0.055, 0.095, t_diag);
-    let mut bg_g = lerp(0.085, 0.145, t_diag);
-    let mut bg_b = lerp(0.165, 0.265, t_diag);
+    let mut bg_r = lerp(0.048, 0.082, t_diag);
+    let mut bg_g = lerp(0.078, 0.132, t_diag);
+    let mut bg_b = lerp(0.155, 0.245, t_diag);
 
-    // Subtle radial ambient glow around the center-left hub
-    let hub_x = -0.34_f32;
-    let hub_y = 0.34_f32;
+    // Smooth radial ambient glow (no SDF crease artifacts)
+    let hub_x = -0.40_f32;
+    let hub_y = 0.40_f32;
+    let dist_center = (u * u + v * v).sqrt();
+    let center_glow = (1.0 - (dist_center / 1.15).clamp(0.0, 1.0)).powi(2);
+    bg_r += center_glow * 0.035;
+    bg_g += center_glow * 0.15;
+    bg_b += center_glow * 0.22;
+
     let dist_hub = ((u - hub_x).powi(2) + (v - hub_y).powi(2)).sqrt();
-    let ambient = (1.0 - (dist_hub / 1.35).clamp(0.0, 1.0)).powi(2);
-    bg_r += ambient * 0.04;
-    bg_g += ambient * 0.16;
-    bg_b += ambient * 0.24;
+    let hub_glow = (1.0 - (dist_hub / 0.85).clamp(0.0, 1.0)).powi(2);
+    bg_r += hub_glow * 0.025;
+    bg_g += hub_glow * 0.12;
+    bg_b += hub_glow * 0.14;
 
-    // Subtle inner rim border highlight
-    let border_dist = (d_badge + 0.032).abs() - 0.014;
+    // Sleek inner rim border highlight flush with badge edge
+    let border_dist = (d_badge + 0.016).abs() - 0.007;
     let border_mask = smoothstep(aa, -aa, border_dist) * smoothstep(0.0, -aa * 2.0, d_badge);
     let rim_t = (1.0 - (v + 1.0) * 0.5).clamp(0.0, 1.0);
-    bg_r = lerp(bg_r, lerp(0.18, 0.35, rim_t), border_mask * 0.65);
-    bg_g = lerp(bg_g, lerp(0.55, 0.82, rim_t), border_mask * 0.65);
-    bg_b = lerp(bg_b, lerp(0.75, 0.98, rim_t), border_mask * 0.65);
+    bg_r = lerp(bg_r, lerp(0.18, 0.30, rim_t), border_mask * 0.55);
+    bg_g = lerp(bg_g, lerp(0.58, 0.84, rim_t), border_mask * 0.55);
+    bg_b = lerp(bg_b, lerp(0.76, 0.96, rim_t), border_mask * 0.55);
 
-    // 2. MQTT Broadcast Signal Waves (3 concentric arcs radiating from bottom-left hub toward top-right)
+    // 2. MQTT Broadcast Signal Waves (3 concentric arcs radiating from bottom-left hub)
     let dx = u - hub_x;
     let dy = v - hub_y;
     let r = (dx * dx + dy * dy).sqrt();
-    // Angle in radians: top-right quadrant from hub means dx > 0 and dy < 0
-    let angle = (-dy).atan2(dx); // 0 is right (+x), PI/2 is up (-y)
 
     let mut wave_sdf = 10.0_f32;
-    let radii = [0.34_f32, 0.62_f32, 0.90_f32];
-    let arc_thickness = 0.062_f32;
+    let radii = [0.27_f32, 0.46_f32, 0.65_f32];
+    let arc_thickness = 0.036_f32;
+    let a_min = 0.16_f32;
+    let a_max = std::f32::consts::FRAC_PI_2 - 0.16_f32;
 
     for &rad in &radii {
-        let a_min = 0.14_f32;
-        let a_max = std::f32::consts::FRAC_PI_2 - 0.14_f32;
         let d_arc = sd_arc_segment(dx, dy, rad, a_min, a_max, arc_thickness);
         wave_sdf = wave_sdf.min(d_arc);
     }
 
-    // 3. Topic Tree Graph Overlay (Hub node + 2 branch nodes connected by lines)
+    // 3. Topic Tree Graph Overlay (symmetric around the 45-deg diagonal, clearing the outer arc)
     let node_hub = (hub_x, hub_y);
-    let node_top = (0.36_f32, -0.36_f32);
-    let node_mid = (0.44_f32, 0.12_f32);
-    let node_top_left = (-0.12_f32, -0.44_f32);
+    let node_top = (0.24_f32, -0.24_f32);
+    let node_mid = (0.44_f32, 0.08_f32);
+    let node_top_left = (-0.08_f32, -0.44_f32);
 
-    let d_line1 = sd_segment(u, v, node_hub.0, node_hub.1, node_top.0, node_top.1) - 0.028;
-    let d_line2 = sd_segment(u, v, node_top.0, node_top.1, node_mid.0, node_mid.1) - 0.024;
-    let d_line3 = sd_segment(u, v, node_top.0, node_top.1, node_top_left.0, node_top_left.1) - 0.024;
+    let d_line1 = sd_segment(u, v, node_hub.0, node_hub.1, node_top.0, node_top.1) - 0.020;
+    let d_line2 = sd_segment(u, v, node_top.0, node_top.1, node_mid.0, node_mid.1) - 0.017;
+    let d_line3 = sd_segment(u, v, node_top.0, node_top.1, node_top_left.0, node_top_left.1) - 0.017;
     let tree_lines_sdf = d_line1.min(d_line2).min(d_line3);
 
-    let d_hub_circle = ((u - node_hub.0).powi(2) + (v - node_hub.1).powi(2)).sqrt() - 0.135;
-    let d_top_circle = ((u - node_top.0).powi(2) + (v - node_top.1).powi(2)).sqrt() - 0.105;
-    let d_mid_circle = ((u - node_mid.0).powi(2) + (v - node_mid.1).powi(2)).sqrt() - 0.075;
-    let d_tl_circle = ((u - node_top_left.0).powi(2) + (v - node_top_left.1).powi(2)).sqrt() - 0.075;
+    let d_hub_circle = ((u - node_hub.0).powi(2) + (v - node_hub.1).powi(2)).sqrt() - 0.115;
+    let d_top_circle = ((u - node_top.0).powi(2) + (v - node_top.1).powi(2)).sqrt() - 0.095;
+    let d_mid_circle = ((u - node_mid.0).powi(2) + (v - node_mid.1).powi(2)).sqrt() - 0.070;
+    let d_tl_circle = ((u - node_top_left.0).powi(2) + (v - node_top_left.1).powi(2)).sqrt() - 0.070;
 
     let nodes_sdf = d_hub_circle
         .min(d_top_circle)
         .min(d_mid_circle)
         .min(d_tl_circle);
 
-    // Soft outer glow around waves & nodes
-    let combined_fg_sdf = wave_sdf.min(nodes_sdf).min(tree_lines_sdf);
-    let glow = (-combined_fg_sdf.max(0.0) * 5.5).exp() * 0.42;
-    bg_r += glow * 0.10;
-    bg_g += glow * 0.75;
-    bg_b += glow * 0.95;
-
-    // Draw connecting tree lines (bright cyan)
+    // Draw connecting tree lines (crisp bright cyan)
     let line_mask = smoothstep(aa, -aa, tree_lines_sdf);
-    bg_r = lerp(bg_r, 0.30, line_mask * 0.9);
-    bg_g = lerp(bg_g, 0.88, line_mask * 0.9);
-    bg_b = lerp(bg_b, 0.98, line_mask * 0.9);
+    bg_r = lerp(bg_r, 0.28, line_mask * 0.92);
+    bg_g = lerp(bg_g, 0.86, line_mask * 0.92);
+    bg_b = lerp(bg_b, 0.96, line_mask * 0.92);
 
     // Draw MQTT broadcast arcs (gradient from cyan #22D3EE to emerald #34D399)
     let wave_mask = smoothstep(aa, -aa, wave_sdf);
-    let wave_grad = ((r - 0.25) / 0.75).clamp(0.0, 1.0);
-    let wave_r = lerp(0.14, 0.20, wave_grad);
-    let wave_g = lerp(0.84, 0.95, wave_grad);
-    let wave_b = lerp(0.98, 0.68, wave_grad);
+    let wave_grad = ((r - 0.24) / 0.45).clamp(0.0, 1.0);
+    let wave_r = lerp(0.13, 0.20, wave_grad);
+    let wave_g = lerp(0.83, 0.92, wave_grad);
+    let wave_b = lerp(0.96, 0.65, wave_grad);
     bg_r = lerp(bg_r, wave_r, wave_mask);
     bg_g = lerp(bg_g, wave_g, wave_mask);
     bg_b = lerp(bg_b, wave_b, wave_mask);
 
-    // Draw nodes (crisp white-cyan core with emerald/cyan ring)
+    // Draw nodes (crisp white core with emerald-cyan ring)
     let node_mask = smoothstep(aa, -aa, nodes_sdf);
-    let inner_cores = (d_hub_circle + 0.055)
+    let inner_cores = (d_hub_circle + 0.053)
         .min(d_top_circle + 0.045)
-        .min(d_mid_circle + 0.032)
-        .min(d_tl_circle + 0.032);
+        .min(d_mid_circle + 0.034)
+        .min(d_tl_circle + 0.034);
     let core_mask = smoothstep(aa, -aa, inner_cores);
 
-    let _ = angle;
     bg_r = lerp(bg_r, 0.18, node_mask);
-    bg_g = lerp(bg_g, 0.92, node_mask);
-    bg_b = lerp(bg_b, 0.82, node_mask);
+    bg_g = lerp(bg_g, 0.90, node_mask);
+    bg_b = lerp(bg_b, 0.78, node_mask);
 
-    bg_r = lerp(bg_r, 0.96, core_mask);
+    bg_r = lerp(bg_r, 0.97, core_mask);
     bg_g = lerp(bg_g, 0.99, core_mask);
     bg_b = lerp(bg_b, 1.00, core_mask);
 

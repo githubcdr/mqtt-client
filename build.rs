@@ -12,6 +12,7 @@ use std::process::Command;
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=assets/icon.svg");
+    println!("cargo:rerun-if-changed=assets/icon.ico");
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let assets_dir = manifest_dir.join("assets");
@@ -95,14 +96,108 @@ fn embed_windows_icon(ico_path: &Path) {
         }
     } else if target_env == "msvc" {
         let res_file = out_dir.join("app_icon.res");
-        let status = Command::new("rc")
-            .args(["/fo", res_file.to_str().unwrap(), rc_path.to_str().unwrap()])
-            .status();
-        if let Ok(s) = status {
-            if s.success() && res_file.exists() {
-                println!("cargo:rustc-link-arg-bins={}", res_file.display());
-            }
+        if write_windows_res_from_ico(ico_path, &res_file).is_ok() && res_file.exists() {
+            println!("cargo:rustc-link-arg-bins={}", res_file.display());
+        } else {
+            println!("cargo:warning=Failed to generate Windows .res icon resource");
         }
+    }
+}
+
+/// Write a standard 32-bit Windows `.res` resource file containing `RT_ICON` and `RT_GROUP_ICON`
+/// directly from an `.ico` file, without requiring `rc.exe` in `PATH`.
+fn write_windows_res_from_ico(ico_path: &Path, res_path: &Path) -> std::io::Result<()> {
+    let ico = fs::read(ico_path)?;
+    if ico.len() < 6 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "ICO file too short",
+        ));
+    }
+    let count = u16::from_le_bytes([ico[4], ico[5]]) as usize;
+    if ico.len() < 6 + count * 16 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "ICO directory truncated",
+        ));
+    }
+
+    let mut out = Vec::new();
+    // 32-byte empty .res header
+    append_res_record(&mut out, 0, 0, 0, 0, 0, &[]);
+
+    // Build RT_GROUP_ICON (type = 14, name = 1)
+    let mut group_data = Vec::with_capacity(6 + count * 14);
+    group_data.extend_from_slice(&ico[0..6]);
+
+    for i in 0..count {
+        let entry_off = 6 + i * 16;
+        let entry = &ico[entry_off..entry_off + 16];
+        let bytes_in_res =
+            u32::from_le_bytes([entry[8], entry[9], entry[10], entry[11]]) as usize;
+        let img_offset =
+            u32::from_le_bytes([entry[12], entry[13], entry[14], entry[15]]) as usize;
+
+        if img_offset + bytes_in_res > ico.len() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "ICO image out of bounds",
+            ));
+        }
+
+        let icon_id = (i + 1) as u16;
+        // RT_ICON = 3
+        append_res_record(
+            &mut out,
+            3,
+            icon_id,
+            0x1010, // MOVEABLE | PURE
+            0x0409, // en-US
+            bytes_in_res as u32,
+            &ico[img_offset..img_offset + bytes_in_res],
+        );
+
+        group_data.extend_from_slice(&entry[0..12]);
+        group_data.extend_from_slice(&icon_id.to_le_bytes());
+    }
+
+    // RT_GROUP_ICON = 14, name = 1
+    append_res_record(
+        &mut out,
+        14,
+        1,
+        0x1030, // MOVEABLE | PURE | DISCARDABLE
+        0x0409,
+        group_data.len() as u32,
+        &group_data,
+    );
+
+    fs::write(res_path, out)
+}
+
+fn append_res_record(
+    out: &mut Vec<u8>,
+    res_type: u16,
+    res_name: u16,
+    mem_flags: u16,
+    lang_id: u16,
+    data_size: u32,
+    data: &[u8],
+) {
+    out.extend_from_slice(&data_size.to_le_bytes());
+    out.extend_from_slice(&32u32.to_le_bytes()); // HeaderSize = 32
+    out.extend_from_slice(&0xFFFFu16.to_le_bytes());
+    out.extend_from_slice(&res_type.to_le_bytes());
+    out.extend_from_slice(&0xFFFFu16.to_le_bytes());
+    out.extend_from_slice(&res_name.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes()); // DataVersion
+    out.extend_from_slice(&mem_flags.to_le_bytes());
+    out.extend_from_slice(&lang_id.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes()); // Version
+    out.extend_from_slice(&0u32.to_le_bytes()); // Characteristics
+    out.extend_from_slice(data);
+    while out.len() % 4 != 0 {
+        out.push(0);
     }
 }
 
@@ -253,7 +348,7 @@ fn render_icon_rgba(size: usize) -> Vec<u8> {
             for &(ox, oy) in &offsets {
                 let u = ((px as f32 + 0.5 + ox) * inv_size) * 2.0 - 1.0;
                 let v = ((py as f32 + 0.5 + oy) * inv_size) * 2.0 - 1.0;
-                let (r, g, b, a) = sample_icon_sdf(u, v);
+                let (r, g, b, a) = sample_icon_sdf(u, v, size);
                 r_acc += r * a;
                 g_acc += g * a;
                 b_acc += b * a;
@@ -281,104 +376,104 @@ fn render_icon_rgba(size: usize) -> Vec<u8> {
     buf
 }
 
-fn sample_icon_sdf(u: f32, v: f32) -> (f32, f32, f32, f32) {
+fn sample_icon_sdf(u: f32, v: f32, size: usize) -> (f32, f32, f32, f32) {
     let half_extent = 0.88_f32;
     let corner_radius = 0.36_f32;
     let d_badge = sd_rounded_box(u, v, half_extent, half_extent, corner_radius);
 
-    let aa = 0.012_f32;
+    let aa = (1.5 / size as f32).max(0.0055);
     let badge_alpha = smoothstep(aa, -aa, d_badge);
     if badge_alpha <= 0.0 {
         return (0.0, 0.0, 0.0, 0.0);
     }
 
     let t_diag = ((u + v) * 0.5 + 1.0) * 0.5;
-    let mut bg_r = lerp(0.055, 0.095, t_diag);
-    let mut bg_g = lerp(0.085, 0.145, t_diag);
-    let mut bg_b = lerp(0.165, 0.265, t_diag);
+    let mut bg_r = lerp(0.048, 0.082, t_diag);
+    let mut bg_g = lerp(0.078, 0.132, t_diag);
+    let mut bg_b = lerp(0.155, 0.245, t_diag);
 
-    let hub_x = -0.34_f32;
-    let hub_y = 0.34_f32;
+    let hub_x = -0.40_f32;
+    let hub_y = 0.40_f32;
+    let dist_center = (u * u + v * v).sqrt();
+    let center_glow = (1.0 - (dist_center / 1.15).clamp(0.0, 1.0)).powi(2);
+    bg_r += center_glow * 0.035;
+    bg_g += center_glow * 0.15;
+    bg_b += center_glow * 0.22;
+
     let dist_hub = ((u - hub_x).powi(2) + (v - hub_y).powi(2)).sqrt();
-    let ambient = (1.0 - (dist_hub / 1.35).clamp(0.0, 1.0)).powi(2);
-    bg_r += ambient * 0.04;
-    bg_g += ambient * 0.16;
-    bg_b += ambient * 0.24;
+    let hub_glow = (1.0 - (dist_hub / 0.85).clamp(0.0, 1.0)).powi(2);
+    bg_r += hub_glow * 0.025;
+    bg_g += hub_glow * 0.12;
+    bg_b += hub_glow * 0.14;
 
-    let border_dist = (d_badge + 0.032).abs() - 0.014;
+    let border_dist = (d_badge + 0.016).abs() - 0.007;
     let border_mask = smoothstep(aa, -aa, border_dist) * smoothstep(0.0, -aa * 2.0, d_badge);
     let rim_t = (1.0 - (v + 1.0) * 0.5).clamp(0.0, 1.0);
-    bg_r = lerp(bg_r, lerp(0.18, 0.35, rim_t), border_mask * 0.65);
-    bg_g = lerp(bg_g, lerp(0.55, 0.82, rim_t), border_mask * 0.65);
-    bg_b = lerp(bg_b, lerp(0.75, 0.98, rim_t), border_mask * 0.65);
+    bg_r = lerp(bg_r, lerp(0.18, 0.30, rim_t), border_mask * 0.55);
+    bg_g = lerp(bg_g, lerp(0.58, 0.84, rim_t), border_mask * 0.55);
+    bg_b = lerp(bg_b, lerp(0.76, 0.96, rim_t), border_mask * 0.55);
 
     let dx = u - hub_x;
     let dy = v - hub_y;
     let r = (dx * dx + dy * dy).sqrt();
 
     let mut wave_sdf = 10.0_f32;
-    let radii = [0.34_f32, 0.62_f32, 0.90_f32];
-    let arc_thickness = 0.062_f32;
+    let radii = [0.27_f32, 0.46_f32, 0.65_f32];
+    let arc_thickness = 0.036_f32;
+    let a_min = 0.16_f32;
+    let a_max = std::f32::consts::FRAC_PI_2 - 0.16_f32;
 
     for &rad in &radii {
-        let a_min = 0.14_f32;
-        let a_max = std::f32::consts::FRAC_PI_2 - 0.14_f32;
         let d_arc = sd_arc_segment(dx, dy, rad, a_min, a_max, arc_thickness);
         wave_sdf = wave_sdf.min(d_arc);
     }
 
     let node_hub = (hub_x, hub_y);
-    let node_top = (0.36_f32, -0.36_f32);
-    let node_mid = (0.44_f32, 0.12_f32);
-    let node_top_left = (-0.12_f32, -0.44_f32);
+    let node_top = (0.24_f32, -0.24_f32);
+    let node_mid = (0.44_f32, 0.08_f32);
+    let node_top_left = (-0.08_f32, -0.44_f32);
 
-    let d_line1 = sd_segment(u, v, node_hub.0, node_hub.1, node_top.0, node_top.1) - 0.028;
-    let d_line2 = sd_segment(u, v, node_top.0, node_top.1, node_mid.0, node_mid.1) - 0.024;
-    let d_line3 = sd_segment(u, v, node_top.0, node_top.1, node_top_left.0, node_top_left.1) - 0.024;
+    let d_line1 = sd_segment(u, v, node_hub.0, node_hub.1, node_top.0, node_top.1) - 0.020;
+    let d_line2 = sd_segment(u, v, node_top.0, node_top.1, node_mid.0, node_mid.1) - 0.017;
+    let d_line3 = sd_segment(u, v, node_top.0, node_top.1, node_top_left.0, node_top_left.1) - 0.017;
     let tree_lines_sdf = d_line1.min(d_line2).min(d_line3);
 
-    let d_hub_circle = ((u - node_hub.0).powi(2) + (v - node_hub.1).powi(2)).sqrt() - 0.135;
-    let d_top_circle = ((u - node_top.0).powi(2) + (v - node_top.1).powi(2)).sqrt() - 0.105;
-    let d_mid_circle = ((u - node_mid.0).powi(2) + (v - node_mid.1).powi(2)).sqrt() - 0.075;
-    let d_tl_circle = ((u - node_top_left.0).powi(2) + (v - node_top_left.1).powi(2)).sqrt() - 0.075;
+    let d_hub_circle = ((u - node_hub.0).powi(2) + (v - node_hub.1).powi(2)).sqrt() - 0.115;
+    let d_top_circle = ((u - node_top.0).powi(2) + (v - node_top.1).powi(2)).sqrt() - 0.095;
+    let d_mid_circle = ((u - node_mid.0).powi(2) + (v - node_mid.1).powi(2)).sqrt() - 0.070;
+    let d_tl_circle = ((u - node_top_left.0).powi(2) + (v - node_top_left.1).powi(2)).sqrt() - 0.070;
 
     let nodes_sdf = d_hub_circle
         .min(d_top_circle)
         .min(d_mid_circle)
         .min(d_tl_circle);
 
-    let combined_fg_sdf = wave_sdf.min(nodes_sdf).min(tree_lines_sdf);
-    let glow = (-combined_fg_sdf.max(0.0) * 5.5).exp() * 0.42;
-    bg_r += glow * 0.10;
-    bg_g += glow * 0.75;
-    bg_b += glow * 0.95;
-
     let line_mask = smoothstep(aa, -aa, tree_lines_sdf);
-    bg_r = lerp(bg_r, 0.30, line_mask * 0.9);
-    bg_g = lerp(bg_g, 0.88, line_mask * 0.9);
-    bg_b = lerp(bg_b, 0.98, line_mask * 0.9);
+    bg_r = lerp(bg_r, 0.28, line_mask * 0.92);
+    bg_g = lerp(bg_g, 0.86, line_mask * 0.92);
+    bg_b = lerp(bg_b, 0.96, line_mask * 0.92);
 
     let wave_mask = smoothstep(aa, -aa, wave_sdf);
-    let wave_grad = ((r - 0.25) / 0.75).clamp(0.0, 1.0);
-    let wave_r = lerp(0.14, 0.20, wave_grad);
-    let wave_g = lerp(0.84, 0.95, wave_grad);
-    let wave_b = lerp(0.98, 0.68, wave_grad);
+    let wave_grad = ((r - 0.24) / 0.45).clamp(0.0, 1.0);
+    let wave_r = lerp(0.13, 0.20, wave_grad);
+    let wave_g = lerp(0.83, 0.92, wave_grad);
+    let wave_b = lerp(0.96, 0.65, wave_grad);
     bg_r = lerp(bg_r, wave_r, wave_mask);
     bg_g = lerp(bg_g, wave_g, wave_mask);
     bg_b = lerp(bg_b, wave_b, wave_mask);
 
     let node_mask = smoothstep(aa, -aa, nodes_sdf);
-    let inner_cores = (d_hub_circle + 0.055)
+    let inner_cores = (d_hub_circle + 0.053)
         .min(d_top_circle + 0.045)
-        .min(d_mid_circle + 0.032)
-        .min(d_tl_circle + 0.032);
+        .min(d_mid_circle + 0.034)
+        .min(d_tl_circle + 0.034);
     let core_mask = smoothstep(aa, -aa, inner_cores);
 
     bg_r = lerp(bg_r, 0.18, node_mask);
-    bg_g = lerp(bg_g, 0.92, node_mask);
-    bg_b = lerp(bg_b, 0.82, node_mask);
+    bg_g = lerp(bg_g, 0.90, node_mask);
+    bg_b = lerp(bg_b, 0.78, node_mask);
 
-    bg_r = lerp(bg_r, 0.96, core_mask);
+    bg_r = lerp(bg_r, 0.97, core_mask);
     bg_g = lerp(bg_g, 0.99, core_mask);
     bg_b = lerp(bg_b, 1.00, core_mask);
 

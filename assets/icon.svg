@@ -1,53 +1,55 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
     <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0E1629"/>
-      <stop offset="50%" stop-color="#132342"/>
-      <stop offset="100%" stop-color="#183B5E"/>
+      <stop offset="0%" stop-color="#0C1427"/>
+      <stop offset="50%" stop-color="#111E39"/>
+      <stop offset="100%" stop-color="#152849"/>
     </linearGradient>
-    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.85"/>
-      <stop offset="100%" stop-color="#34D399" stop-opacity="0.45"/>
+    <radialGradient id="ambientGlow" cx="50%" cy="50%" r="52%">
+      <stop offset="0%" stop-color="#22D3EE" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4DD6F5" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#2E94C2" stop-opacity="0.35"/>
     </linearGradient>
     <linearGradient id="waveGrad" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#22D3EE"/>
-      <stop offset="100%" stop-color="#34D399"/>
+      <stop offset="0%" stop-color="#21D4F5"/>
+      <stop offset="100%" stop-color="#33EBA6"/>
     </linearGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="8" result="blur"/>
-      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
-    </filter>
   </defs>
 
   <!-- Rounded Squircle Background -->
-  <rect x="32" y="32" width="448" height="448" rx="96" ry="96" fill="url(#bgGrad)" stroke="url(#rimGrad)" stroke-width="8"/>
+  <rect x="31" y="31" width="450" height="450" rx="92" ry="92" fill="url(#bgGrad)"/>
+  <rect x="31" y="31" width="450" height="450" rx="92" ry="92" fill="url(#ambientGlow)"/>
+  <rect x="35" y="35" width="442" height="442" rx="88" ry="88" fill="none" stroke="url(#rimGrad)" stroke-width="3.5"/>
 
   <!-- Topic Tree Connections -->
-  <g stroke="#4ADE80" stroke-opacity="0.8" stroke-width="12" stroke-linecap="round">
-    <line x1="168" y1="344" x2="348" y2="164"/>
-    <line x1="348" y1="164" x2="368" y2="286"/>
-    <line x1="348" y1="164" x2="225" y2="144"/>
+  <g stroke="#47DCF5" stroke-opacity="0.92" stroke-linecap="round">
+    <line x1="153.6" y1="358.4" x2="317.44" y2="194.56" stroke-width="10.2"/>
+    <line x1="317.44" y1="194.56" x2="368.64" y2="276.48" stroke-width="8.7"/>
+    <line x1="317.44" y1="194.56" x2="235.52" y2="143.36" stroke-width="8.7"/>
   </g>
 
   <!-- MQTT Broadcast Signal Arcs -->
-  <g fill="none" stroke="url(#waveGrad)" stroke-width="28" stroke-linecap="round" filter="url(#glow)">
-    <path d="M 182 258 A 88 88 0 0 1 254 330"/>
-    <path d="M 192 186 A 158 158 0 0 1 326 320"/>
-    <path d="M 204 114 A 230 230 0 0 1 398 308"/>
+  <g fill="none" stroke="url(#waveGrad)" stroke-width="18.4" stroke-linecap="round">
+    <path d="M 164.61 290.16 A 69.12 69.12 0 0 1 221.84 347.39"/>
+    <path d="M 172.36 242.14 A 117.76 117.76 0 0 1 269.86 339.64"/>
+    <path d="M 180.11 194.12 A 166.40 166.40 0 0 1 317.87 331.89"/>
   </g>
 
   <!-- Topic & Broker Nodes -->
-  <g filter="url(#glow)">
-    <circle cx="168" cy="344" r="34" fill="#2EE59D"/>
-    <circle cx="168" cy="344" r="18" fill="#F8FAFC"/>
+  <g>
+    <circle cx="153.6" cy="358.4" r="29.4" fill="#2EE5C7"/>
+    <circle cx="153.6" cy="358.4" r="15.9" fill="#F7FCFF"/>
 
-    <circle cx="348" cy="164" r="27" fill="#22D3EE"/>
-    <circle cx="348" cy="164" r="14" fill="#F8FAFC"/>
+    <circle cx="317.44" cy="194.56" r="24.3" fill="#2EE5C7"/>
+    <circle cx="317.44" cy="194.56" r="12.8" fill="#F7FCFF"/>
 
-    <circle cx="368" cy="286" r="19" fill="#34D399"/>
-    <circle cx="368" cy="286" r="10" fill="#F8FAFC"/>
+    <circle cx="368.64" cy="276.48" r="17.9" fill="#2EE5C7"/>
+    <circle cx="368.64" cy="276.48" r="9.2" fill="#F7FCFF"/>
 
-    <circle cx="225" cy="144" r="19" fill="#34D399"/>
-    <circle cx="225" cy="144" r="10" fill="#F8FAFC"/>
+    <circle cx="235.52" cy="143.36" r="17.9" fill="#2EE5C7"/>
+    <circle cx="235.52" cy="143.36" r="9.2" fill="#F7FCFF"/>
   </g>
 </svg>
