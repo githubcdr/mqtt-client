@@ -10,12 +10,21 @@ impl MqttApp {
             .exact_size(46.0)
             .show(ui, |ui| {
                 ui.horizontal_centered(|ui| {
-                    let sidebar_label = if self.show_profile_sidebar {
-                        "◀ Profiles"
-                    } else {
-                        "▶ Profiles"
-                    };
-                    if ui.button(sidebar_label).clicked() {
+                    let btn = ui.button("   Profiles");
+                    let tri_center = egui::pos2(btn.rect.left() + 12.0, btn.rect.center().y);
+                    let tri_color = ui.style().interact(&btn).text_color();
+                    let dx = if self.show_profile_sidebar { -3.5 } else { 3.5 };
+                    let pts = vec![
+                        egui::pos2(tri_center.x + dx, tri_center.y),
+                        egui::pos2(tri_center.x - dx, tri_center.y - 4.0),
+                        egui::pos2(tri_center.x - dx, tri_center.y + 4.0),
+                    ];
+                    ui.painter().add(egui::Shape::convex_polygon(
+                        pts,
+                        tri_color,
+                        egui::Stroke::NONE,
+                    ));
+                    if btn.clicked() {
                         self.show_profile_sidebar = !self.show_profile_sidebar;
                     }
 
@@ -137,7 +146,11 @@ impl MqttApp {
             });
     }
 
-    pub(crate) fn render_bottom_bar(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn render_bottom_bar(
+        &mut self,
+        ui: &mut egui::Ui,
+        available: egui::Rect,
+    ) -> egui::Rect {
         let panel_id = if self.show_logs {
             "bottom_status_bar_open"
         } else {
@@ -154,47 +167,60 @@ impl MqttApp {
             panel = panel.resizable(false);
         }
 
-        panel.show(ui, |ui| {
-            ui.horizontal(|ui| {
-                let toggle_txt = if self.show_logs {
-                    "Hide Event Log"
-                } else {
-                    "Event Log"
-                };
-                if ui.small_button(toggle_txt).clicked() {
-                    self.show_logs = !self.show_logs;
-                }
-                ui.separator();
-                if let Some(latest) = self.logs.front() {
-                    ui.label(
-                        RichText::new(latest)
-                            .monospace()
-                            .size(11.5)
-                            .color(Color32::from_rgb(190, 198, 212)),
-                    );
-                }
-            });
+        // Render the bottom bar on Order::Middle so its background and top resize
+        // handle sit above the workspace panels (Order::Background) and below
+        // popups/tooltips (Order::Foreground).
+        let bottom_layer =
+            egui::LayerId::new(egui::Order::Middle, ui.scope_id().with("event_log_layer"));
+        let mut layer_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(available)
+                .layer_id(bottom_layer),
+        );
+        panel
+            .show(&mut layer_ui, |ui| {
+                ui.horizontal(|ui| {
+                    let toggle_txt = if self.show_logs {
+                        "Hide Event Log"
+                    } else {
+                        "Event Log"
+                    };
+                    if ui.small_button(toggle_txt).clicked() {
+                        self.show_logs = !self.show_logs;
+                    }
+                    ui.separator();
+                    if let Some(latest) = self.logs.front() {
+                        ui.label(
+                            RichText::new(latest)
+                                .monospace()
+                                .size(11.5)
+                                .color(Color32::from_rgb(190, 198, 212)),
+                        );
+                    }
+                });
 
-            if self.show_logs {
-                ui.separator();
-                ScrollArea::vertical()
-                    .max_height(ui.available_height())
-                    .auto_shrink([false, false])
-                    .id_salt("event_log_scroll")
-                    .show(ui, |ui| {
-                        ui.set_min_width(ui.available_width());
-                        for line in &self.logs {
-                            let color = if line.contains("ERROR") || line.contains("rejected") {
-                                Color32::from_rgb(255, 110, 110)
-                            } else if line.contains("Connected") {
-                                Color32::from_rgb(100, 230, 140)
-                            } else {
-                                Color32::from_rgb(185, 192, 205)
-                            };
-                            ui.label(RichText::new(line).monospace().size(11.5).color(color));
-                        }
-                    });
-            }
-        });
+                if self.show_logs {
+                    ui.separator();
+                    ScrollArea::vertical()
+                        .max_height(ui.available_height())
+                        .auto_shrink([false, false])
+                        .id_salt("event_log_scroll")
+                        .show(ui, |ui| {
+                            ui.set_min_width(ui.available_width());
+                            for line in &self.logs {
+                                let color = if line.contains("ERROR") || line.contains("rejected") {
+                                    Color32::from_rgb(255, 110, 110)
+                                } else if line.contains("Connected") {
+                                    Color32::from_rgb(100, 230, 140)
+                                } else {
+                                    Color32::from_rgb(185, 192, 205)
+                                };
+                                ui.label(RichText::new(line).monospace().size(11.5).color(color));
+                            }
+                        });
+                }
+            })
+            .response
+            .rect
     }
 }

@@ -159,6 +159,25 @@ impl Default for AppConfig {
 
 impl AppConfig {
     pub fn default_config_path() -> PathBuf {
+        #[cfg(target_os = "macos")]
+        {
+            let cwd_is_root = std::env::current_dir()
+                .map(|p| p == Path::new("/"))
+                .unwrap_or(true);
+            let in_app_bundle = std::env::current_exe()
+                .map(|p| p.to_string_lossy().contains(".app/Contents/MacOS"))
+                .unwrap_or(false);
+            if cwd_is_root || in_app_bundle {
+                if let Some(home) = std::env::var_os("HOME") {
+                    let dir = PathBuf::from(home)
+                        .join("Library")
+                        .join("Application Support")
+                        .join("mqtt-client");
+                    let _ = fs::create_dir_all(&dir);
+                    return dir.join("mqtt_profiles.toml");
+                }
+            }
+        }
         PathBuf::from("mqtt_profiles.toml")
     }
 

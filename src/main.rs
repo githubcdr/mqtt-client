@@ -5,6 +5,8 @@ mod config;
 mod icon;
 #[cfg(target_os = "linux")]
 mod linux_integration;
+#[cfg(target_os = "macos")]
+mod macos_integration;
 mod payload;
 mod protocol;
 mod tree;
@@ -58,7 +60,11 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         concat!("MQTT Explorer RS v", env!("CARGO_PKG_VERSION")),
         native_options,
-        Box::new(|cc| Ok(Box::new(MqttApp::new(cc)))),
+        Box::new(|cc| {
+            #[cfg(target_os = "macos")]
+            macos_integration::set_dock_icon();
+            Ok(Box::new(MqttApp::new(cc)))
+        }),
     )
 }
 
@@ -539,14 +545,19 @@ impl eframe::App for MqttApp {
         }
 
         self.render_top_bar(ui);
-        self.render_bottom_bar(ui);
+        let available_after_top = ui.available_rect_before_wrap();
+        let bottom_rect = self.render_bottom_bar(ui, available_after_top);
+
+        let mut workspace_rect = available_after_top;
+        workspace_rect.max.y = workspace_rect.max.y.min(bottom_rect.min.y);
+        let mut workspace_ui = ui.new_child(egui::UiBuilder::new().max_rect(workspace_rect));
 
         if self.show_profile_sidebar {
             egui::Panel::left("profile_sidebar")
                 .resizable(true)
                 .default_size(320.0)
                 .size_range(260.0..=520.0)
-                .show(ui, |ui| {
+                .show(&mut workspace_ui, |ui| {
                     self.render_profile_sidebar(ui);
                 });
         }
@@ -555,11 +566,11 @@ impl eframe::App for MqttApp {
             .resizable(true)
             .default_size(480.0)
             .size_range(340.0..=820.0)
-            .show(ui, |ui| {
+            .show(&mut workspace_ui, |ui| {
                 self.render_right_panel(ui);
             });
 
-        egui::CentralPanel::default().show(ui, |ui| {
+        egui::CentralPanel::default().show(&mut workspace_ui, |ui| {
             self.render_topic_tree_panel(ui);
         });
     }

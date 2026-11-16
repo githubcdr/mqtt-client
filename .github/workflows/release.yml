@@ -81,13 +81,16 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" dist/
-          chmod +x "dist/${{ matrix.binary }}"
-          if [[ "${{ matrix.name }}" == linux-* ]]; then
+          if [[ "${{ matrix.name }}" == macos-* ]]; then
+            bash scripts/bundle-macos.sh "target/${{ matrix.target }}/release/${{ matrix.binary }}" dist
+            COPYFILE_DISABLE=1 tar -czf "mqtt-client-${{ matrix.name }}.tar.gz" -C dist "MQTT Explorer RS.app"
+          else
+            cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" dist/
+            chmod +x "dist/${{ matrix.binary }}"
             cp assets/mqtt-client.desktop dist/
             cp assets/icon.png dist/
+            tar -czf "mqtt-client-${{ matrix.name }}.tar.gz" -C dist .
           fi
-          tar -czf "mqtt-client-${{ matrix.name }}.tar.gz" -C dist .
 
       - name: Package Archive & Standalone EXE (Windows)
         if: matrix.package == 'zip'
