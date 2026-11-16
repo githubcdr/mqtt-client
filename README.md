@@ -69,6 +69,23 @@ To install manually instead, drop `assets/mqtt-client.desktop` into
 `~/.local/share/icons/hicolor/512x512/apps/mqtt-client.png`, and put the
 binary on your `$PATH`.
 
+### macOS App Bundle & Gatekeeper
+
+To package a local release build as a macOS `.app` bundle (`target/release/MQTT Explorer RS.app`) with the app icon:
+
+```bash
+cargo build --release
+./scripts/bundle-macos.sh
+```
+
+Release archives on GitHub are ad-hoc signed (not notarized with a paid Apple Developer ID). If macOS Gatekeeper blocks the downloaded app with *"Apple could not verify “MQTT Explorer RS.app” is free of malware"*, clear the quarantine attribute after extracting:
+
+```bash
+xattr -cr "/Applications/MQTT Explorer RS.app"
+```
+
+Or open **System Settings → Privacy & Security** and click **Open Anyway** after attempting to launch the app.
+
 ---
 
 ## Cross-Platform Targets (`amd64` & `arm64`)
