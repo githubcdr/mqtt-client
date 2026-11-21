@@ -194,6 +194,7 @@ fn sample_icon_sdf(u: f32, v: f32, size: usize) -> (f32, f32, f32, f32) {
 
 /// Encode raw RGBA bytes as a PNG (color type 6) using uncompressed DEFLATE
 /// blocks — same dependency-free approach as `build.rs`.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub fn encode_png_rgba(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(b"\x89PNG\r\n\x1a\n");
@@ -242,6 +243,7 @@ pub fn encode_png_rgba(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
     out
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_png_chunk(out: &mut Vec<u8>, chunk_type: &[u8; 4], data: &[u8]) {
     let len = data.len() as u32;
     out.extend_from_slice(&len.to_be_bytes());
@@ -254,6 +256,7 @@ fn write_png_chunk(out: &mut Vec<u8>, chunk_type: &[u8; 4], data: &[u8]) {
     out.extend_from_slice(&crc.to_be_bytes());
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn crc32(bytes: &[u8]) -> u32 {
     let mut crc = 0xFFFF_FFFFu32;
     for &b in bytes {
@@ -269,6 +272,7 @@ fn crc32(bytes: &[u8]) -> u32 {
     !crc
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn adler32(bytes: &[u8]) -> u32 {
     let mut a: u32 = 1;
     let mut b: u32 = 0;
