@@ -289,6 +289,9 @@ impl MqttApp {
                     assigned_client_id,
                     server_keep_alive,
                 } => {
+                    self.tree.clear();
+                    self.selected_topic = None;
+                    self.inspector_cache = None;
                     self.conn_state = ConnectionState::Connected;
                     let mut detail = format!("Connected (session_present={})", session_present);
                     if let Some(cid) = assigned_client_id {
@@ -545,19 +548,14 @@ impl eframe::App for MqttApp {
         }
 
         self.render_top_bar(ui);
-        let available_after_top = ui.available_rect_before_wrap();
-        let bottom_rect = self.render_bottom_bar(ui, available_after_top);
-
-        let mut workspace_rect = available_after_top;
-        workspace_rect.max.y = workspace_rect.max.y.min(bottom_rect.min.y);
-        let mut workspace_ui = ui.new_child(egui::UiBuilder::new().max_rect(workspace_rect));
+        self.render_bottom_bar(ui);
 
         if self.show_profile_sidebar {
             egui::Panel::left("profile_sidebar")
                 .resizable(true)
                 .default_size(320.0)
                 .size_range(260.0..=520.0)
-                .show(&mut workspace_ui, |ui| {
+                .show(ui, |ui| {
                     self.render_profile_sidebar(ui);
                 });
         }
@@ -566,11 +564,11 @@ impl eframe::App for MqttApp {
             .resizable(true)
             .default_size(480.0)
             .size_range(340.0..=820.0)
-            .show(&mut workspace_ui, |ui| {
+            .show(ui, |ui| {
                 self.render_right_panel(ui);
             });
 
-        egui::CentralPanel::default().show(&mut workspace_ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             self.render_topic_tree_panel(ui);
         });
     }
